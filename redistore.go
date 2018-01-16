@@ -151,6 +151,20 @@ func dial(network, address, password string) (redis.Conn, error) {
 	return c, err
 }
 
+func dialTLS(network, address, password string) (redis.Conn, error) {
+	c, err := redis.Dial(network, address, redis.DialUseTLS(true))
+	if err != nil {
+		return nil, err
+	}
+	if password != "" {
+		if _, err := c.Do("AUTH", password); err != nil {
+			c.Close()
+			return nil, err
+		}
+	}
+	return c, err
+}
+
 // NewRediStore returns a new RediStore.
 // size: maximum number of idle connections.
 func NewRediStore(size int, network, address, password string, keyPairs ...[]byte) (*RediStore, error) {
@@ -163,6 +177,22 @@ func NewRediStore(size int, network, address, password string, keyPairs ...[]byt
 		},
 		Dial: func() (redis.Conn, error) {
 			return dial(network, address, password)
+		},
+	}, keyPairs...)
+}
+
+// NewRediStoreWithTLS returns a new RediStore.
+// size: maximum number of idle connections.
+func NewRediStoreWithTLS(size int, network, address, password string, keyPairs ...[]byte) (*RediStore, error) {
+	return NewRediStoreWithPool(&redis.Pool{
+		MaxIdle:     size,
+		IdleTimeout: 240 * time.Second,
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+		Dial: func() (redis.Conn, error) {
+			return dialTLS(network, address, password)
 		},
 	}, keyPairs...)
 }
